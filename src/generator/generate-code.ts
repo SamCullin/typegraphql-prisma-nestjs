@@ -33,9 +33,26 @@ import {
 import saveSourceFile from "../utils/saveSourceFile";
 import { GenerateCodeOptions } from "./options";
 
+export const defaultHooks = {
+  generateEnumFromDef: generateEnumFromDef,
+  generateEnumsBarrelFile: generateEnumsBarrelFile,
+  generateObjectTypeClassFromModel: generateObjectTypeClassFromModel,
+  generateModelsBarrelFile: generateModelsBarrelFile,
+  generateOutputTypeClassFromType: generateOutputTypeClassFromType,
+  generateArgsBarrelFile: generateArgsBarrelFile,
+  generateOutputsBarrelFile: generateOutputsBarrelFile,
+  generateInputTypeClassFromType: generateInputTypeClassFromType,
+  generateInputsBarrelFile: generateInputsBarrelFile,
+  generateRelationsResolverClassesFromModel: generateRelationsResolverClassesFromModel,
+  generateResolversBarrelFile: generateResolversBarrelFile,
+  generateCrudResolverClassFromMapping: generateCrudResolverClassFromMapping,
+  generateIndexFile: generateIndexFile,
+};
+
 export default async function generateCode(
   dmmf: DMMF.Document,
   options: GenerateCodeOptions,
+  hook = defaultHooks,
   log: (msg: string) => void = noop,
 ) {
   const baseDirPath = options.outputDirPath;
@@ -47,14 +64,14 @@ export default async function generateCode(
   const datamodelEnumNames = dmmf.datamodel.enums.map(enumDef => enumDef.name);
   await Promise.all(
     dmmf.datamodel.enums.map(enumDef =>
-      generateEnumFromDef(project, baseDirPath, enumDef),
+      hook.generateEnumFromDef(project, baseDirPath, enumDef),
     ),
   );
   await Promise.all(
     dmmf.schema.enums
       // skip enums from datamodel
       .filter(enumDef => !datamodelEnumNames.includes(enumDef.name))
-      .map(enumDef => generateEnumFromDef(project, baseDirPath, enumDef)),
+      .map(enumDef => hook.generateEnumFromDef(project, baseDirPath, enumDef)),
   );
   const emittedEnumNames = [
     ...new Set([
@@ -67,13 +84,18 @@ export default async function generateCode(
     undefined,
     { overwrite: true },
   );
-  generateEnumsBarrelFile(enumsBarrelExportSourceFile, emittedEnumNames);
+  hook.generateEnumsBarrelFile(enumsBarrelExportSourceFile, emittedEnumNames);
   await saveSourceFile(enumsBarrelExportSourceFile);
 
   log("Generating models...");
   await Promise.all(
     dmmf.datamodel.models.map(model =>
-      generateObjectTypeClassFromModel(project, baseDirPath, model, modelNames),
+      hook.generateObjectTypeClassFromModel(
+        project,
+        baseDirPath,
+        model,
+        modelNames,
+      ),
     ),
   );
   const modelsBarrelExportSourceFile = project.createSourceFile(
@@ -81,7 +103,7 @@ export default async function generateCode(
     undefined,
     { overwrite: true },
   );
-  generateModelsBarrelFile(
+  hook.generateModelsBarrelFile(
     modelsBarrelExportSourceFile,
     dmmf.datamodel.models.map(it => it.name),
   );
@@ -97,7 +119,7 @@ export default async function generateCode(
   );
   const argsTypesNamesArray = await Promise.all(
     outputTypesToGenerate.map(type =>
-      generateOutputTypeClassFromType(
+      hook.generateOutputTypeClassFromType(
         project,
         resolversDirPath,
         type,
@@ -117,7 +139,10 @@ export default async function generateCode(
     undefined,
     { overwrite: true },
   );
-  generateArgsBarrelFile(outputsArgsBarrelExportSourceFile, argsTypesNames);
+  hook.generateArgsBarrelFile(
+    outputsArgsBarrelExportSourceFile,
+    argsTypesNames,
+  );
   await saveSourceFile(outputsArgsBarrelExportSourceFile);
 
   const outputsBarrelExportSourceFile = project.createSourceFile(
@@ -130,7 +155,7 @@ export default async function generateCode(
     undefined,
     { overwrite: true },
   );
-  generateOutputsBarrelFile(
+  hook.generateOutputsBarrelFile(
     outputsBarrelExportSourceFile,
     outputTypesToGenerate.map(it => it.name),
     argsTypesNames.length > 0,
@@ -140,7 +165,7 @@ export default async function generateCode(
   log("Generating input types...");
   await Promise.all(
     dmmf.schema.inputTypes.map(type =>
-      generateInputTypeClassFromType(
+      hook.generateInputTypeClassFromType(
         project,
         resolversDirPath,
         type,
@@ -158,7 +183,7 @@ export default async function generateCode(
     undefined,
     { overwrite: true },
   );
-  generateInputsBarrelFile(
+  hook.generateInputsBarrelFile(
     inputsBarrelExportSourceFile,
     dmmf.schema.inputTypes.map(it => it.name),
   );
@@ -173,7 +198,7 @@ export default async function generateCode(
           type => type.name === model.name,
         )!;
         const mapping = dmmf.mappings.find(it => it.model === model.name)!;
-        return generateRelationsResolverClassesFromModel(
+        return hook.generateRelationsResolverClassesFromModel(
           project,
           baseDirPath,
           model,
@@ -194,7 +219,7 @@ export default async function generateCode(
       undefined,
       { overwrite: true },
     );
-    generateResolversBarrelFile(
+    hook.generateResolversBarrelFile(
       "relations",
       relationResolversBarrelExportSourceFile,
       relationResolversData,
@@ -208,7 +233,7 @@ export default async function generateCode(
       const model = dmmf.datamodel.models.find(
         model => model.name === mapping.model,
       )!;
-      return generateCrudResolverClassFromMapping(
+      return hook.generateCrudResolverClassFromMapping(
         project,
         baseDirPath,
         mapping,
@@ -229,7 +254,7 @@ export default async function generateCode(
     undefined,
     { overwrite: true },
   );
-  generateResolversBarrelFile(
+  hook.generateResolversBarrelFile(
     "crud",
     crudResolversBarrelExportSourceFile,
     crudResolversData,
@@ -242,6 +267,6 @@ export default async function generateCode(
     undefined,
     { overwrite: true },
   );
-  generateIndexFile(indexSourceFile, relationResolversData.length > 0);
+  hook.generateIndexFile(indexSourceFile, relationResolversData.length > 0);
   await saveSourceFile(indexSourceFile);
 }
